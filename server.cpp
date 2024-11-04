@@ -9,7 +9,7 @@
 
 #define PORT 8080
 #define MAX_PACKET_SIZE 150  // Limit packet size to 150 bytes
-
+#define BACKLOG 10
 // Function declarations
 int create_server_socket();
 void bind_server_socket(int server_fd, struct sockaddr_in *address);
@@ -36,7 +36,7 @@ int main() {
 }
 
 void listen_for_connections(int server_fd) {
-    
+    listen(server_fd, BACKLOG);
 }
 
 // Function to create the server socket
@@ -44,13 +44,7 @@ int create_server_socket() {
     // TODO: Implement server socket creation
     int server_fd = socket(AF_INET,SOCK_DGRAM, 0);
 
-    //check for errors
-    if (server_fd == -1) 
-    {
-        return -1;    
-    }
     return server_fd;
-    std::cout << server_fd<<std::endl;
 }
 
 // Function to bind the server socket to an address and port
@@ -59,12 +53,6 @@ void bind_server_socket(int server_fd, struct sockaddr_in *address) {
 
     int bind_result = bind(server_fd, (struct sockaddr *)address, sizeof(*address));
 
-    //check for errors
-    if (bind_result == -1) 
-    {
-        std::cerr << "Error binding server socket" << std::endl;
-        return;
-    }
     return;
 }
 
@@ -72,7 +60,8 @@ void bind_server_socket(int server_fd, struct sockaddr_in *address) {
 int accept_client_connection(int server_fd, struct sockaddr_in *address) {
     // TODO: Implement accepting client connection
     // You this is where you keep state related to the client. This might be useful for retransmission.
-    return 0;
+    socklen_t address_len = sizeof(*address);
+    return accept(server_fd, (struct sockaddr *)address, (socklen_t*) &address_len);
 }
 
 // Function to handle communication with the client
@@ -83,5 +72,6 @@ void handle_client(int client_socket) {
 // Function to close the server socket
 void close_server_socket(int server_fd) {
     // TODO: Implement closing the server socket
+    close(server_fd);
 }
 
