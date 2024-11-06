@@ -24,7 +24,9 @@ int main() {
     
     server_fd = create_server_socket();
     bind_server_socket(server_fd, &address);
-    listen_for_connections(server_fd);
+    
+    //don't need to listen in UDP
+    //listen_for_connections(server_fd);
 
     while (1) {
         client_socket = accept_client_connection(server_fd, &address);
@@ -36,6 +38,7 @@ int main() {
 }
 
 void listen_for_connections(int server_fd) {
+    //don't use listen in UDP
     listen(server_fd, BACKLOG);
 }
 
@@ -67,6 +70,9 @@ int accept_client_connection(int server_fd, struct sockaddr_in *address) {
 // Function to handle communication with the client
 void handle_client(int client_socket) {
     // TODO: Implement the logic to receive and send data to the client
+    
+    //receive data
+
 }
 
 // Function to close the server socket
