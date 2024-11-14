@@ -1,5 +1,7 @@
 // server.c
+#include <cstddef>
 #include <iostream>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,6 +31,7 @@ int main() {
     //listen_for_connections(server_fd);
 
     while (1) {
+        
         client_socket = accept_client_connection(server_fd, &address);
         handle_client(client_socket);
     }
@@ -70,9 +73,17 @@ int accept_client_connection(int server_fd, struct sockaddr_in *address) {
 // Function to handle communication with the client
 void handle_client(int client_socket) {
     // TODO: Implement the logic to receive and send data to the client
-    
+    char *message = nullptr;
+    sockaddr from;
+    socklen_t fromLength;
     //receive data
-
+    recvfrom(client_socket, &message, MAX_PACKET_SIZE, 0, &from, &fromLength);
+    
+    if(message != nullptr) {
+        std::cout<<"Received message: "<<message<<std::endl;
+        //send data back as an acknowledgement if it was received
+        sendto(client_socket, message, MAX_PACKET_SIZE, 0, &from, fromLength);
+    }
 }
 
 // Function to close the server socket
