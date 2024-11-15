@@ -42,40 +42,49 @@ void configure_server_address(struct sockaddr_in *serv_addr) {
     }
 }
 
-void send_message(int client_socket, const char *message, size_t message_length) {
-    struct sockaddr_in server_addr;
-    socklen_t addr_len = sizeof(server_addr);
-    
-    // Initialize server address structure
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(PORT);
-    inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
+void send_message(int client_socket, const char *message, size_t message_length, const struct sockaddr_in *server_addr) {
+    if (message == NULL || server_addr == NULL) {
+        fprintf(stderr, "Error: NULL message or server address\n");
+        return;
+    }
 
+    socklen_t addr_len = sizeof(*server_addr);
     size_t total_packets = (message_length / MAX_PACKET_SIZE) + 
                            ((message_length % MAX_PACKET_SIZE) ? 1 : 0);
 
+    printf("Sending a message of length %zu bytes in %zu packet(s)\n", message_length, total_packets);
+
     for (size_t i = 0; i < total_packets; ++i) {
         size_t packet_size = MAX_PACKET_SIZE;
-        
-        // Handle the last packet
-        if (i == total_packets - 1) {
+
+        // Handle the last packet, which may be smaller than MAX_PACKET_SIZE
+        if (i == total_packets - 1 && message_length % MAX_PACKET_SIZE != 0) {
             packet_size = message_length % MAX_PACKET_SIZE;
         }
 
-        // Send each packet
+        const char *packet_start = message + (i * MAX_PACKET_SIZE);
+
+        // Send each packet and check for errors
         ssize_t sent_bytes = sendto(client_socket, 
-                                    message + (i * MAX_PACKET_SIZE), 
-                                    packet_size, 0, 
-                                    (struct sockaddr *)&server_addr, 
+                                    packet_start, 
+                                    packet_size, 
+                                    0, 
+                                    (const struct sockaddr *)server_addr, 
                                     addr_len);
 
         if (sent_bytes == -1) {
             perror("sendto");
+            fprintf(stderr, "Error sending packet %zu of %zu\n", i + 1, total_packets);
+            return;
+        } else if ((size_t)sent_bytes != packet_size) {
+            fprintf(stderr, "Error: Partial send detected. Sent %zd bytes, expected %zu bytes\n", sent_bytes, packet_size);
             return;
         }
 
-        printf("Sent packet %zu/%zu of size %zu bytes\n", i + 1, total_packets, packet_size);
+        printf("Packet %zu/%zu of size %zu bytes sent successfully\n", i + 1, total_packets, packet_size);
     }
+
+    printf("Message sent successfully in %zu packet(s)\n", total_packets);
 }
+
 
