@@ -14,15 +14,39 @@ void send_message(int client_socket, struct sockaddr_in *serv_addr, const char *
 int main() {
     int client_socket;
     struct sockaddr_in serv_addr;
-    char *message = "This is an example of a very long message that will be broken into multiple 150-byte packets.";
+    const char *message = "This is an example of a very long message that will be broken into multiple 150-byte packets.";
+    size_t message_length = strlen(message);
+
+    if (message_length == 0) {
+        fprintf(stderr, "Error: Cannot send an empty message\n");
+        return EXIT_FAILURE;
+    }
 
     client_socket = create_client_socket();
-    configure_server_address(&serv_addr);
-    send_message(client_socket, &serv_addr, message);
+    if (client_socket < 0) {
+        fprintf(stderr, "Error: Failed to create client socket\n");
+        return EXIT_FAILURE;
+    }
 
-    close(client_socket);
-    return 0;
+    // Initialize server address
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+        fprintf(stderr, "Error: Invalid server address\n");
+        close_client_socket(client_socket);
+        return EXIT_FAILURE;
+    }
+
+    // Send the message
+    send_message(client_socket, message, message_length, &serv_addr);
+
+    // Close the client socket
+    close_client_socket(client_socket);
+    return EXIT_SUCCESS;
 }
+
 
 int create_client_socket() {
     int client_socket = socket(AF_INET, SOCK_DGRAM, 0);
