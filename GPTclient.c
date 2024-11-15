@@ -42,33 +42,40 @@ void configure_server_address(struct sockaddr_in *serv_addr) {
     }
 }
 
-void send_message(int client_socket, struct sockaddr_in *serv_addr, const char *message) {
-    int total_packets = (strlen(message) + MAX_PACKET_SIZE - 1) / MAX_PACKET_SIZE;
-    int sent_packets = 0;
-    char buffer[MAX_PACKET_SIZE];
-    socklen_t addr_len = sizeof(*serv_addr);
+void send_message(int client_socket, const char *message, size_t message_length) {
+    struct sockaddr_in server_addr;
+    socklen_t addr_len = sizeof(server_addr);
+    
+    // Initialize server address structure
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(PORT);
+    inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
 
-    // Send total packet count
-    int total_packets_network = htonl(total_packets);
-    sendto(client_socket, &total_packets_network, sizeof(total_packets_network), 0, (struct sockaddr *)serv_addr, addr_len);
+    size_t total_packets = (message_length / MAX_PACKET_SIZE) + 
+                           ((message_length % MAX_PACKET_SIZE) ? 1 : 0);
 
-    while (sent_packets < total_packets) {
-        int start_idx = sent_packets * MAX_PACKET_SIZE;
-        int bytes_to_send = strlen(message + start_idx) > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : strlen(message + start_idx);
-
-        strncpy(buffer, message + start_idx, bytes_to_send);
-        buffer[bytes_to_send] = '\0';
-
-        // Send packet
-        sendto(client_socket, buffer, bytes_to_send, 0, (struct sockaddr *)serv_addr, addr_len);
-
-        // Wait for acknowledgment
-        int ack;
-        recvfrom(client_socket, &ack, sizeof(ack), 0, (struct sockaddr *)serv_addr, &addr_len);
-        if (ack > sent_packets) {
-            sent_packets++;
+    for (size_t i = 0; i < total_packets; ++i) {
+        size_t packet_size = MAX_PACKET_SIZE;
+        
+        // Handle the last packet
+        if (i == total_packets - 1) {
+            packet_size = message_length % MAX_PACKET_SIZE;
         }
-    }
 
-    printf("Message sent successfully in %d packets.\n", total_packets);
+        // Send each packet
+        ssize_t sent_bytes = sendto(client_socket, 
+                                    message + (i * MAX_PACKET_SIZE), 
+                                    packet_size, 0, 
+                                    (struct sockaddr *)&server_addr, 
+                                    addr_len);
+
+        if (sent_bytes == -1) {
+            perror("sendto");
+            return;
+        }
+
+        printf("Sent packet %zu/%zu of size %zu bytes\n", i + 1, total_packets, packet_size);
+    }
 }
+

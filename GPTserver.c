@@ -49,32 +49,41 @@ void bind_server_socket(int server_fd, struct sockaddr_in *address) {
 
 void handle_client(int server_fd) {
     char buffer[MAX_PACKET_SIZE];
-    char message[MAX_MESSAGE_SIZE] = {0};
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(client_addr);
-    int total_packets, received_packets = 0;
+    size_t total_received = 0;
+    char *reconstructed_message = (char *)malloc(1); // Start with a small buffer
 
-    // Receive total packet count
-    recvfrom(server_fd, &total_packets, sizeof(total_packets), 0, (struct sockaddr *)&client_addr, &addr_len);
-    total_packets = ntohl(total_packets); // Convert to host byte order
+    printf("Ready to receive data...\n");
 
-    printf("Expecting %d packets...\n", total_packets);
+    while (1) {
+        ssize_t bytes_received = recvfrom(server_fd, buffer, MAX_PACKET_SIZE, 0, 
+                                          (struct sockaddr *)&client_addr, &addr_len);
 
-    // Receive each packet and reassemble
-    while (received_packets < total_packets) {
-        int bytes_received = recvfrom(server_fd, buffer, MAX_PACKET_SIZE, 0, (struct sockaddr *)&client_addr, &addr_len);
-        if (bytes_received < 0) {
-            perror("Error receiving packet");
-            continue;
+        if (bytes_received == -1) {
+            perror("recvfrom");
+            break;
         }
 
-        buffer[bytes_received] = '\0';
-        strcat(message, buffer); // Append to message
-        received_packets++;
+        // Resize the reconstructed message buffer
+        reconstructed_message = (char *)realloc(reconstructed_message, total_received + bytes_received);
+        memcpy(reconstructed_message + total_received, buffer, bytes_received);
+        total_received += bytes_received;
 
-        // Send acknowledgment
-        sendto(server_fd, &received_packets, sizeof(received_packets), 0, (struct sockaddr *)&client_addr, addr_len);
+        printf("Received packet of size %ld bytes. Total received: %ld bytes.\n", bytes_received, total_received);
+
+        // Check for termination (optional protocol logic)
+        if (bytes_received < MAX_PACKET_SIZE) {
+            printf("Last packet received.\n");
+            break;
+        }
     }
 
-    printf("Received message: %s\n", message);
+    // Null-terminate and print the reconstructed message for safety
+    reconstructed_message = (char *)realloc(reconstructed_message, total_received + 1);
+    reconstructed_message[total_received] = '\0';
+    printf("Reconstructed message: %s\n", reconstructed_message);
+
+    free(reconstructed_message);
 }
+
