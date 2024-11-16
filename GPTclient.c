@@ -4,6 +4,7 @@ CSC-2770 Program 3
 Authors: Mitchell Koester & Justin Nelson
 Last Modified: 11/16/2024
 */
+//#include <cstddef>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,7 +16,7 @@ Last Modified: 11/16/2024
 int create_client_socket();
 void configure_server_address(struct sockaddr_in *serv_addr);
 void send_message(int client_socket, struct sockaddr_in *serv_addr, const char *message);
-
+void connect_to_server(int client_socket, struct sockaddr_in *serv_addr);
 int main() {
     int client_socket;
     struct sockaddr_in serv_addr;
@@ -25,6 +26,7 @@ int main() {
 
     client_socket = create_client_socket();
     configure_server_address(&serv_addr);
+    connect_to_server(client_socket, &serv_addr);
     send_message(client_socket, &serv_addr, message);
 
     close(client_socket);
@@ -63,7 +65,7 @@ void configure_server_address(struct sockaddr_in *serv_addr) {
 //parameters: int client_socket, sockaddr_in * server_address, char* message
 //returns void
 void send_message(int client_socket, struct sockaddr_in *serv_addr, const char *message) {
-    printf("%lu\n", (strlen(message) * sizeof(char)));
+    //printf("%lu\n", (strlen(message) * sizeof(char)));
 
     //set total packets to the ceiling of size of message/MAX_PACKET_SIZE
     int total_packets = (strlen(message) + MAX_PACKET_SIZE -1) / MAX_PACKET_SIZE;
@@ -112,3 +114,35 @@ void send_message(int client_socket, struct sockaddr_in *serv_addr, const char *
 
     printf("Message sent successfully in %d packets.\n", total_packets);
 }
+
+void connect_to_server(int client_socket, struct sockaddr_in *serv_addr) 
+{
+    char buffer[7];
+    socklen_t addr_len = sizeof(*serv_addr);
+
+    //Send SYN to server
+    sendto(client_socket, "SYN", 4, 0, (struct sockaddr *)serv_addr, addr_len);
+    printf("Sent: SYN\n");
+
+    //Receive SYNACK from server
+    recvfrom(client_socket, buffer, 6, 0, (struct sockaddr *)serv_addr, &addr_len);
+    
+    //add terminating character 
+    buffer[6] = '\0'; 
+    printf("Received: %s\n", buffer);
+
+    //Check if SYNACK was received
+    if (strcmp(buffer, "SYNACK") == 0)
+    {
+        //Send ACK back to server
+        sendto(client_socket, "ACK", 4, 0, (struct sockaddr *)serv_addr, addr_len);
+        printf("Sent: ACK\n");
+        //print out server address
+        printf("Connected to server %u\n", serv_addr->sin_addr.s_addr);
+    } 
+    else
+    {
+        printf("Failed to connect: Expected SYNACK, received %s\n", buffer);
+    }
+}
+

@@ -17,6 +17,7 @@ Last Modified: 11/16/2024
 int create_server_socket();
 void bind_server_socket(int server_fd, struct sockaddr_in *address);
 void handle_client(int server_fd);
+int accept_client_connection(int server_fd, struct sockaddr_in *address);
 
 int main() {
     int server_fd;
@@ -28,8 +29,11 @@ int main() {
     printf("Server is listening on port %d...\n", PORT);
     while(1)
     {
-        //don't need accept as all packet transfer happens in handle_client
-        handle_client(server_fd);
+        //accept client connection and handle only if accept is successful
+        if(accept_client_connection(server_fd, &address) == 0)
+        {
+            handle_client(server_fd);
+        }
     }
 
     close(server_fd);
@@ -112,4 +116,45 @@ void handle_client(int server_fd) {
     }
 
     printf("Received message: %s\n", message);
+}
+
+int accept_client_connection(int server_fd, struct sockaddr_in *address) 
+{
+    char buffer[7];
+    socklen_t addr_len = sizeof(*address);
+    printf("Waiting for connection...\n");
+
+    //Receive SYN from client
+    recvfrom(server_fd, buffer, 4, 0, (struct sockaddr *)address, &addr_len);
+    buffer[3] = '\0'; // Null-terminate the received message
+    printf("Received: %s\n", buffer);
+
+    if (strcmp(buffer, "SYN") == 0) {
+        
+        // Step Send SYNACK to client
+        sendto(server_fd, "SYNACK", 6, 0, (struct sockaddr *)address, addr_len);
+        printf("Sent: SYNACK\n");
+
+        //Wait for ACK from the client
+        recvfrom(server_fd, buffer, 4, 0, (struct sockaddr *)address, &addr_len);
+        
+        //add terminating character
+        buffer[3] = '\0'; 
+        printf("Received: %s\n", buffer);
+
+        if (strcmp(buffer, "ACK") == 0) {
+            printf("Handshake complete. Client connected.\n");
+            return 0; // Connection successful
+        }
+        else
+        {
+            printf("Handshake failed: Expected ACK, received %s\n", buffer);
+        }
+    }
+    else
+    {
+        printf("Invalid connection request: %s\n", buffer);
+    }
+    //Connection failed if here
+    return 1;
 }
