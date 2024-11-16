@@ -22,7 +22,7 @@ int main() {
     struct sockaddr_in serv_addr;
 
     //original message wasn't over 150 bytes so I added some characters at the end
-    char *message = "This is an example of a very long message that will be broken into multiple 150-byte packets. aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    char message[] = "This is an example of a very long message that will be broken into multiple 150-byte packets. aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     client_socket = create_client_socket();
     configure_server_address(&serv_addr);
