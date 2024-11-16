@@ -1,9 +1,14 @@
+/*
+client.c
+CSC-2770 Program 3
+Authors: Mitchell Koester & Justin Nelson
+Last Modified: 11/16/2024
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-
 #define PORT 8080
 #define MAX_PACKET_SIZE 150
 
@@ -14,42 +19,25 @@ void send_message(int client_socket, struct sockaddr_in *serv_addr, const char *
 int main() {
     int client_socket;
     struct sockaddr_in serv_addr;
-    const char *message = "This is an example of a very long message that will be broken into multiple 150-byte packets.";
-    size_t message_length = strlen(message);
 
-    if (message_length == 0) {
-        fprintf(stderr, "Error: Cannot send an empty message\n");
-        return EXIT_FAILURE;
-    }
+    //original message wasn't over 150 bytes so I added some characters at the end
+    char *message = "This is an example of a very long message that will be broken into multiple 150-byte packets. aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     client_socket = create_client_socket();
-    if (client_socket < 0) {
-        fprintf(stderr, "Error: Failed to create client socket\n");
-        return EXIT_FAILURE;
-    }
+    configure_server_address(&serv_addr);
+    send_message(client_socket, &serv_addr, message);
 
-    // Initialize server address
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(PORT);
-
-    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
-        fprintf(stderr, "Error: Invalid server address\n");
-        close_client_socket(client_socket);
-        return EXIT_FAILURE;
-    }
-
-    // Send the message
-    send_message(client_socket, message, message_length, &serv_addr);
-
-    // Close the client socket
-    close_client_socket(client_socket);
-    return EXIT_SUCCESS;
+    close(client_socket);
+    return 0;
 }
 
-
+//create_client_socket function
+//creates UDP socket
+//parameters: none
+//returns: socket file descriptor
 int create_client_socket() {
     int client_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    //verify no errors in socket creation
     if (client_socket < 0) {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
@@ -57,6 +45,10 @@ int create_client_socket() {
     return client_socket;
 }
 
+//configure_server_address function
+//takes in server address and configures for localhost communication over defined port
+//parameters: sockaddr_in *
+//returns: void
 void configure_server_address(struct sockaddr_in *serv_addr) {
     serv_addr->sin_family = AF_INET;
     serv_addr->sin_port = htons(PORT);
@@ -66,49 +58,57 @@ void configure_server_address(struct sockaddr_in *serv_addr) {
     }
 }
 
-void send_message(int client_socket, const char *message, size_t message_length, const struct sockaddr_in *server_addr) {
-    if (message == NULL || server_addr == NULL) {
-        fprintf(stderr, "Error: NULL message or server address\n");
-        return;
-    }
+//send_message function
+//sends a message to server address on given socket
+//parameters: int client_socket, sockaddr_in * server_address, char* message
+//returns void
+void send_message(int client_socket, struct sockaddr_in *serv_addr, const char *message) {
+    printf("%lu\n", (strlen(message) * sizeof(char)));
 
-    socklen_t addr_len = sizeof(*server_addr);
-    size_t total_packets = (message_length / MAX_PACKET_SIZE) + 
-                           ((message_length % MAX_PACKET_SIZE) ? 1 : 0);
+    //set total packets to the ceiling of size of message/MAX_PACKET_SIZE
+    int total_packets = (strlen(message) + MAX_PACKET_SIZE -1) / MAX_PACKET_SIZE;
+    int sent_packets = 0;
+    char buffer[MAX_PACKET_SIZE];
+    socklen_t addr_len = sizeof(*serv_addr);
 
-    printf("Sending a message of length %zu bytes in %zu packet(s)\n", message_length, total_packets);
+    // convert int into network-byte order for transmission
+    int total_packets_network = htonl(total_packets);
+    
+    //send total bytes to be transported to the server
+    sendto(client_socket, &total_packets_network, sizeof(total_packets_network), 0, (struct sockaddr *)serv_addr, addr_len);
 
-    for (size_t i = 0; i < total_packets; ++i) {
-        size_t packet_size = MAX_PACKET_SIZE;
+    while (sent_packets < total_packets) {
+        int start_pos = sent_packets * MAX_PACKET_SIZE;
 
-        // Handle the last packet, which may be smaller than MAX_PACKET_SIZE
-        if (i == total_packets - 1 && message_length % MAX_PACKET_SIZE != 0) {
-            packet_size = message_length % MAX_PACKET_SIZE;
+        //get the remaining length
+        size_t remaining_length = strlen(message + start_pos);
+
+        //determine bytes to send in the next packet 
+        int bytes_to_send;
+        if (remaining_length > MAX_PACKET_SIZE) 
+        {
+            bytes_to_send = MAX_PACKET_SIZE;
+        }
+        else 
+        {
+            bytes_to_send = remaining_length;
         }
 
-        const char *packet_start = message + (i * MAX_PACKET_SIZE);
+        //add the current partition of the message to send to the buffer
+        strncpy(buffer, message + start_pos, bytes_to_send);
+        buffer[bytes_to_send] = '\0';
 
-        // Send each packet and check for errors
-        ssize_t sent_bytes = sendto(client_socket, 
-                                    packet_start, 
-                                    packet_size, 
-                                    0, 
-                                    (const struct sockaddr *)server_addr, 
-                                    addr_len);
+        // Send packet
+        sendto(client_socket, buffer, bytes_to_send, 0, (struct sockaddr *)serv_addr, addr_len);
 
-        if (sent_bytes == -1) {
-            perror("sendto");
-            fprintf(stderr, "Error sending packet %zu of %zu\n", i + 1, total_packets);
-            return;
-        } else if ((size_t)sent_bytes != packet_size) {
-            fprintf(stderr, "Error: Partial send detected. Sent %zd bytes, expected %zu bytes\n", sent_bytes, packet_size);
-            return;
+        // Wait for acknowledgment
+        //make sure the acknowledgements includes the correct number of packets sent, otherwise we will loop through again and retransmit
+        int ack;
+        recvfrom(client_socket, &ack, sizeof(ack), 0, (struct sockaddr *)serv_addr, &addr_len);
+        if (ack > sent_packets) {
+            sent_packets++;
         }
-
-        printf("Packet %zu/%zu of size %zu bytes sent successfully\n", i + 1, total_packets, packet_size);
     }
 
-    printf("Message sent successfully in %zu packet(s)\n", total_packets);
+    printf("Message sent successfully in %d packets.\n", total_packets);
 }
-
-
